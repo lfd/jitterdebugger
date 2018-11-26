@@ -46,7 +46,9 @@ struct stats {
 	unsigned int min;	/* in us */
 	unsigned int avg;	/* in us */
 	unsigned int hist_size;
-	uint64_t *hist;		/* each slot is one us */
+	uint64_t *hist;		/* bucket array: each slot is one us */
+	uint64_t *hist_ovf;	/* continous list array */
+	size_t hist_ovf_last;
 	uint64_t total;
 	uint64_t count;
 	struct ringbuffer *rb;
@@ -156,6 +158,7 @@ static pid_t gettid(void)
 static void dump_stats(FILE *f, struct system_info *sysinfo, struct stats *s)
 {
 	unsigned int i, j, comma;
+	uint64_t acc = 1ul;
 
 	fprintf(f, "{\n");
 	fprintf(f, "  \"version\": 2,\n");
@@ -178,6 +181,17 @@ static void dump_stats(FILE *f, struct system_info *sysinfo, struct stats *s)
 			fprintf(f, "%s", comma ? ",\n" : "\n");
 			fprintf(f, "        \"%u\": %" PRIu64,j, s[i].hist[j]);
 			comma = 1;
+		}
+		for (j = 0; j < s[i].hist_ovf_last; j++) {
+			if (j+1 != s[i].hist_ovf_last
+			&& s[i].hist_ovf[j] == s[i].hist_ovf[j+1])
+			{
+				acc++;
+				continue;
+			}
+			fprintf(f, ",\n");
+			fprintf(f, "        \"%lu\": %lu", s[i].hist_ovf[j], acc);
+			acc = 1;
 		}
 		if (comma)
 			fprintf(f, "\n");
@@ -319,6 +333,12 @@ static void *store_samples(void *arg)
 	return NULL;
 }
 
+static inline int hist_cmp(const void *a, const void *b)
+{
+	/* ascending sorting */
+	return *(uint64_t*) a > *(uint64_t*) b;
+}
+
 static void *worker(void *arg)
 {
 	struct stats *s = arg;
@@ -368,6 +388,15 @@ static void *worker(void *arg)
 
 		if (diff < s->hist_size)
 			s->hist[diff]++;
+		else if (s->hist_ovf_last != s->hist_size)
+			s->hist_ovf[s->hist_ovf_last++] = diff;
+		else
+		{
+			/* Swap last occurence if it's lower than current diff */
+			uint64_t *last = s->hist_ovf + s->hist_ovf_last-1;
+			if(*last < diff)
+				*last = diff;
+		}
 
 		if (s->rb)
 			ringbuffer_write(s->rb, now, diff);
@@ -412,6 +441,11 @@ static void start_measuring(struct stats *s, struct record_data *rec)
 		s[i].hist_size = HIST_MAX_ENTRIES;
 		s[i].hist = calloc(HIST_MAX_ENTRIES, sizeof(uint64_t));
 		if (!s[i].hist)
+			err_handler(errno, "calloc()");
+
+		s[i].hist_ovf_last = 0;
+		s[i].hist_ovf = calloc(HIST_MAX_ENTRIES, sizeof(uint64_t));
+		if (!s[i].hist_ovf)
 			err_handler(errno, "calloc()");
 
 		if (rec) {
@@ -729,6 +763,12 @@ int main(int argc, char *argv[])
 
 	WRITE_ONCE(jd_shutdown, 1);
 	stop_workload();
+
+	/* sort hist overflows before displaying them */
+	for (i = 0; i < num_threads; i++) {
+		qsort(s[i].hist_ovf, s[i].hist_ovf_last,
+			sizeof(s[i].hist_ovf[0]), &hist_cmp);
+	}
 
 	if (rec) {
 		err = pthread_join(iopid, NULL);

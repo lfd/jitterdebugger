@@ -489,7 +489,6 @@ static struct option long_options[] = {
 	{ "verbose",	no_argument,		0,	'v' },
 	{ "version",	no_argument,		0,	 0  },
 	{ "command",	required_argument,	0,	'c' },
-	{ NULL,		required_argument,	0,	'N' },
 
 	{ "loops",	required_argument,	0,	'l' },
 	{ "duration",	required_argument,	0,	'D' },

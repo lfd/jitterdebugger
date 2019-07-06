@@ -33,7 +33,7 @@
 
 #define NSEC_PER_SEC		1000000000
 #define NSEC_PER_US		1000UL
-#define HIST_MAX_ENTRIES	1000
+#define HIST_MAX_ENTRIES	(1000 * NSEC_PER_US)
 
 /* Default test interval in us */
 #define DEFAULT_INTERVAL        1000
@@ -84,7 +84,7 @@ static inline int64_t ts_sub(struct timespec t1, struct timespec t2)
 	diff += ((int) t1.tv_nsec - (int) t2.tv_nsec);
 
 	/* Return diff in us */
-	return diff / 1000;
+	return diff;
 }
 
 static inline struct timespec ts_add(struct timespec t1, struct timespec t2)
@@ -213,7 +213,7 @@ static void __display_stats(struct stats *s)
 
 	for (i = 0; i < num_threads; i++) {
 		printf("T:%2u (%5lu) A:%2u C:%10" PRIu64
-			" Min:%10u Avg:%8.2f Max:%10u "
+			" Min:%10u Avg:%12.2f Max:%14u "
 			VT100_ERASE_EOL "\n",
 			i, (long)s[i].tid, s[i].affinity,
 			s[i].count,

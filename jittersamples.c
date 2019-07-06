@@ -107,7 +107,7 @@ static void output_hdf5(FILE *input, const char *ofile, unsigned int cpus_online
 		cpudata[i].count = 0;
 		cpudata[i].data = malloc(BLOCK_SIZE * sizeof(struct latency_sample));
 
-		if (asprintf(&sid, "cpu%d\n", i) < 0)
+		if (asprintf(&sid, "cpu%d", i) < 0)
 			err_handler(errno, "failed to create label\n");
 		cpudata[i].set = H5PTcreate(file, sid, type, (hsize_t)bs, H5P_DEFAULT);
 		free(sid);
